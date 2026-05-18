@@ -10,6 +10,9 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 app.use(cors());
 
+const jwt = require('jsonwebtoken');
+const secret = "horse battery staple";
+
 const {
     body,
     param,
@@ -20,6 +23,28 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 app.set('query parser', 'extended');
+
+const users = [
+ { username: "Alice", password: "password", role: "admin" },
+ { username: "Bob", password: "password", role: "user" },
+];
+
+app.post('/api/login', function (req, res) {
+    const { username, password } = req.body;
+
+    const user = users.find(function (u) {
+        return u.username === username && u.password === password;
+    });
+
+    if (user) {
+        const token = jwt.sign(user, secret, {expiresIn : '1h'});
+        res.json({ token });
+    } else {
+        res.sendStatus(401);
+    }
+});
+
+
 
 // manually set CORS headers
 // app.use(function(req, res, next) {
@@ -32,7 +57,7 @@ app.set('query parser', 'extended');
 
 
 
-app.get('/api/records', async function (req, res) {
+app.get('/api/records', auth, async function (req, res) {
 
     const options = req.query;
 
@@ -148,7 +173,7 @@ app.patch('/api/records/:id', async function (req, res) {
         }
 });
 
-app.delete('/api/records/:id', async function (req, res) {
+app.delete('/api/records/:id',auth, onlyAdmin, async function (req, res) {
     try {
         const _id = new ObjectId(req.params.id);
 
@@ -160,6 +185,25 @@ app.delete('/api/records/:id', async function (req, res) {
         res.sendStatus(500);
     }
 });
+
+function auth(req, res, next) {
+ const authHeader = req.headers["authorization"];
+ if(!authHeader) return res.sendStatus(401);
+ const [ type, token ] = authHeader.split(" ");
+ if(type !== "Bearer") return res.sendStatus(401);
+ jwt.verify(token, secret, function(err, data) {
+ if(err) res.sendStatus(401);
+ else next();
+ });
+}
+
+function onlyAdmin(req, res, next) {
+    const [ type, token ] = req.headers["authorization"].split(" ");
+    jwt.verify(token, secret, function(err, data) {
+        if(user.role === "admin") next();
+        else res.sendStatus(403);
+});
+}
 
 // to test
 app.get('/test', function (req, res) {
